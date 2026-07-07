@@ -1,0 +1,679 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>郵資加總工具</title>
+<style>
+  :root {
+    --bg: #f5f4f0;
+    --surface: #ffffff;
+    --border: #e0ddd6;
+    --text: #1a1916;
+    --muted: #6b6860;
+    --accent: #2c5f8a;
+    --accent-light: #e8f0f7;
+    --success: #2a7a4b;
+    --success-light: #e6f4ec;
+    --danger: #c0392b;
+    --radius: 10px;
+    --font: 'Noto Sans TC', 'Microsoft JhengHei', sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    padding: 2rem 1rem;
+  }
+  .container { max-width: 680px; margin: 0 auto; }
+  header { margin-bottom: 2rem; }
+  header h1 { font-size: 1.4rem; font-weight: 600; letter-spacing: .02em; }
+  header p { font-size: .875rem; color: var(--muted); margin-top: .3rem; }
+
+  .drop-zone {
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 2.5rem 1.5rem;
+    text-align: center;
+    cursor: pointer;
+    transition: border-color .2s, background .2s;
+    user-select: none;
+  }
+  .drop-zone:hover, .drop-zone.over {
+    border-color: var(--accent);
+    background: var(--accent-light);
+  }
+  .drop-icon { font-size: 2.2rem; margin-bottom: .6rem; }
+  .drop-zone strong { display: block; font-size: 1rem; margin-bottom: .3rem; }
+  .drop-zone span { font-size: .8rem; color: var(--muted); }
+  input[type=file] { display: none; }
+
+  .file-chips {
+    display: flex; flex-wrap: wrap; gap: 6px;
+    margin: .8rem 0;
+    min-height: 0;
+  }
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 3px 10px;
+    font-size: .78rem;
+    color: var(--muted);
+  }
+  .chip.ok { border-color: #a8d5bc; color: var(--success); background: var(--success-light); }
+  .chip.err { border-color: #f0b8b3; color: var(--danger); background: #fdf0ef; }
+
+  .errors { margin: .5rem 0; }
+  .err-msg { font-size: .8rem; color: var(--danger); margin: 2px 0; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+    margin-top: 1.2rem;
+  }
+  .card-header {
+    padding: .8rem 1.1rem;
+    border-bottom: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .card-header .title { font-weight: 600; font-size: .95rem; }
+  .badge {
+    font-size: .75rem; padding: 2px 9px;
+    border-radius: 20px;
+    background: var(--accent-light);
+    color: var(--accent);
+    font-weight: 500;
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: .875rem; }
+  th {
+    text-align: left; padding: .55rem 1.1rem;
+    font-size: .78rem; font-weight: 500;
+    color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    background: #fafaf8;
+  }
+  th.r, td.r { text-align: right; }
+  td { padding: .6rem 1.1rem; border-bottom: 1px solid #f0ede8; }
+  tr:last-child td { border-bottom: none; }
+  .total-row td {
+    font-weight: 600;
+    background: #fafaf8;
+    border-top: 1px solid var(--border);
+    border-bottom: none;
+  }
+  .zero { color: #c8c5bf; }
+
+  .actions {
+    padding: .8rem 1.1rem;
+    border-top: 1px solid var(--border);
+    display: flex; gap: 8px; flex-wrap: wrap;
+  }
+  button {
+    font-family: var(--font);
+    font-size: .82rem;
+    padding: .45rem .9rem;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--surface);
+    color: var(--text);
+    cursor: pointer;
+    transition: background .15s;
+  }
+  button:hover { background: var(--bg); }
+  button.primary {
+    background: var(--accent);
+    color: #fff;
+    border-color: var(--accent);
+  }
+  button.primary:hover { background: #245077; }
+  button:disabled { opacity: .5; cursor: default; }
+
+  .hint {
+    font-size: .78rem; color: var(--muted);
+    margin-top: 1rem; text-align: center;
+  }
+
+  td.src-cell { text-align: right; }
+  .src-btn {
+    font-size: .75rem;
+    color: var(--accent);
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    text-decoration: underline dotted;
+  }
+  .src-btn:hover { background: none; color: #245077; }
+
+  /* Modal */
+  .modal-overlay {
+    display: none;
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,.35);
+    z-index: 100;
+    align-items: center; justify-content: center;
+  }
+  .modal-overlay.open { display: flex; }
+  .modal {
+    background: var(--surface);
+    border-radius: var(--radius);
+    padding: 1.2rem 1.4rem;
+    max-width: 420px; width: 90%;
+    box-shadow: 0 8px 32px rgba(0,0,0,.18);
+  }
+  .modal h3 { font-size: .95rem; font-weight: 600; margin-bottom: .8rem; }
+  .modal table { font-size: .82rem; }
+  .modal th { font-size: .75rem; }
+  .modal td { padding: .45rem .7rem; }
+  .modal-close {
+    margin-top: 1rem;
+    font-size: .82rem;
+    padding: .4rem .9rem;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>💰 郵資加總工具</h1>
+
+  </header>
+
+  <div class="drop-zone" id="drop">
+    <div class="drop-icon">📁</div>
+    <strong>拖放檔案到這裡</strong>
+    <span>或點擊選擇檔案</span>
+    <input type="file" id="file-input" accept=".xlsx,.ods" multiple>
+  </div>
+
+  <div class="file-chips" id="chips"></div>
+  <div class="errors" id="errors"></div>
+
+  <div class="card" id="result-card" style="display:none">
+    <div class="card-header">
+      <span class="title">加總結果</span>
+      <span class="badge" id="file-badge"></span>
+    </div>
+    <table id="result-table">
+      <thead>
+        <tr>
+          <th>類別</th>
+          <th class="r">件數</th>
+          <th class="r">金額（元）</th>
+          <th class="r">來源</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="actions">
+      <button class="primary" onclick="copyTSV()">📋 複製</button>
+      <button onclick="clearAll()">🗑 清除重來</button>
+    </div>
+  </div>
+
+
+</div>
+
+<!-- 來源明細 Modal -->
+<div class="modal-overlay" id="modal-overlay" onclick="if(event.target===this)closeModal()">
+  <div class="modal">
+    <h3 id="modal-title"></h3>
+    <table>
+      <thead><tr>
+        <th>檔案</th><th class="r">件數</th><th class="r">金額（元）</th>
+      </tr></thead>
+      <tbody id="modal-body"></tbody>
+    </table>
+    <button class="modal-close" onclick="closeModal()">關閉</button>
+  </div>
+</div>
+
+<script>
+// ── ODS 解析（純 JS，無外部依賴）──────────────────────────────
+
+const CATS = [
+  { name: '平信',     ci: 'K',  ki: 'K' },
+  { name: '限時專送', ci: 'L',  ki: 'L' },
+  { name: '掛號',     ci: 'M',  ki: 'M' },
+  { name: '雙掛號',   ci: 'N',  ki: 'N' },
+  { name: '限時掛號', ci: 'O',  ki: 'O' },
+  { name: '限時雙掛', ci: 'P',  ki: 'P' },
+  { name: '送達證書', ci: 'Q',  ki: 'Q' },
+  { name: '航空雙掛', ci: 'R',  ki: 'R' },
+  { name: '快捷',     ci: 'S',  ki: 'S' },
+  { name: '包裹',     ci: 'T',  ki: 'T' },
+];
+// 郵費單：row3 = 件數，row4 = 金額，欄位字母相同
+
+// ── 迷你 ZIP 解析 ──────────────────────────────────────────────
+function parseZip(buf) {
+  const view = new DataView(buf);
+  const u8 = new Uint8Array(buf);
+  const files = {};
+  let i = 0;
+  while (i < u8.length - 4) {
+    if (view.getUint32(i, true) !== 0x04034b50) { i++; continue; }
+    const flags      = view.getUint16(i + 6,  true);
+    const method     = view.getUint16(i + 8,  true);
+    const compSz     = view.getUint32(i + 18, true);
+    const uncompSz   = view.getUint32(i + 22, true);
+    const nameLen    = view.getUint16(i + 26, true);
+    const extraLen   = view.getUint16(i + 28, true);
+    const name       = new TextDecoder().decode(u8.slice(i + 30, i + 30 + nameLen));
+    const dataStart  = i + 30 + nameLen + extraLen;
+    const compressed = u8.slice(dataStart, dataStart + compSz);
+    if (method === 0) {
+      files[name] = compressed;
+    } else if (method === 8) {
+      try { files[name] = inflateRaw(compressed, uncompSz); } catch(e) {}
+    }
+    i = dataStart + compSz;
+  }
+  return files;
+}
+
+// ── DEFLATE（僅 stored + fixed + dynamic huffman）──────────────
+function inflateRaw(data, outSize) {
+  let src = 0, bit = 0, bitbuf = 0;
+  const out = new Uint8Array(outSize || data.length * 4);
+  let dst = 0;
+
+  function rb(n) {
+    while (bit < n) { bitbuf |= data[src++] << bit; bit += 8; }
+    const v = bitbuf & ((1 << n) - 1);
+    bitbuf >>= n; bit -= n;
+    return v;
+  }
+  function ensure(need) {
+    if (dst + need > out.length) {
+      const bigger = new Uint8Array(Math.max(out.length * 2, dst + need));
+      bigger.set(out); return bigger;
+    }
+    return out;
+  }
+
+  const CL_ORDER = [16,17,18,0,8,7,9,6,10,5,11,4,12,3,13,2,14,1,15];
+
+  function buildTree(lengths) {
+    const maxLen = Math.max(...lengths);
+    const count = new Array(maxLen + 1).fill(0);
+    for (const l of lengths) if (l) count[l]++;
+    const nextCode = new Array(maxLen + 1).fill(0);
+    for (let i = 1; i < maxLen; i++) nextCode[i + 1] = (nextCode[i] + count[i]) << 1;
+    const table = {};
+    for (let i = 0; i < lengths.length; i++) {
+      const l = lengths[i];
+      if (l) { table[(nextCode[l]++ | (1 << l)).toString(2)] = i; }
+    }
+    return { table, maxLen };
+  }
+
+  function readSym(tree) {
+    let code = 1;
+    for (let l = 1; l <= tree.maxLen; l++) {
+      code = (code << 1) | rb(1);
+      const s = code.toString(2);
+      if (s in tree.table) return tree.table[s];
+    }
+    throw new Error('bad symbol');
+  }
+
+  const FIXED_LL = [...Array(288)].map((_,i) => i<144?8:i<256?9:i<280?7:8);
+  const FIXED_D  = new Array(32).fill(5);
+
+  function decode(ll, dist, o) {
+    const LEN_BASE  = [3,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,35,43,51,59,67,83,99,115,131,163,195,227,258];
+    const LEN_EXTRA = [0,0,0,0,0,0,0,0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4,  4,  5,  5,  5,  5,  0];
+    const DST_BASE  = [1,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577];
+    const DST_EXTRA = [0,0,0,0,1,1,2,2, 3, 3, 4, 4, 5, 5,  6,  6,  7,  7,  8,  8,   9,   9,  10,  10,  11,  11,  12,   12,   13,   13];
+    while (true) {
+      const sym = readSym(ll);
+      if (sym < 256) { o = ensure(1); o[dst++] = sym; }
+      else if (sym === 256) break;
+      else {
+        const li = sym - 257;
+        const len = LEN_BASE[li] + rb(LEN_EXTRA[li]);
+        const di = readSym(dist);
+        const d = DST_BASE[di] + rb(DST_EXTRA[di]);
+        o = ensure(len);
+        for (let k = 0; k < len; k++) { o[dst] = o[dst - d]; dst++; }
+      }
+    }
+    return o;
+  }
+
+  let res = out;
+  while (true) {
+    const bfinal = rb(1), btype = rb(2);
+    if (btype === 0) {
+      bit = 0; bitbuf = 0;
+      const len = data[src] | (data[src+1] << 8); src += 4;
+      res = ensure(len);
+      res.set(data.slice(src, src + len), dst); dst += len; src += len;
+    } else if (btype === 1) {
+      res = decode(buildTree(FIXED_LL), buildTree(FIXED_D), res);
+    } else if (btype === 2) {
+      const hlit = rb(5) + 257, hdist = rb(5) + 1, hclen = rb(4) + 4;
+      const clLens = new Array(19).fill(0);
+      for (let i = 0; i < hclen; i++) clLens[CL_ORDER[i]] = rb(3);
+      const clTree = buildTree(clLens);
+      const lens = [];
+      while (lens.length < hlit + hdist) {
+        const s = readSym(clTree);
+        if (s < 16) { lens.push(s); }
+        else if (s === 16) { const l = lens[lens.length-1]; for (let r=rb(2)+3;r--;) lens.push(l); }
+        else if (s === 17) { for (let r=rb(3)+3;r--;) lens.push(0); }
+        else { for (let r=rb(7)+11;r--;) lens.push(0); }
+      }
+      res = decode(buildTree(lens.slice(0, hlit)), buildTree(lens.slice(hlit)), res);
+    }
+    if (bfinal) break;
+  }
+  return res.slice(0, dst);
+}
+
+// ── XLSX 解析 ─────────────────────────────────────────────────
+function parseXLSX(buf) {
+  const files = parseZip(buf);
+
+  // 1. 讀取 workbook.xml 找「郵費單」工作表的 rid
+  const wbXml = decodeXml(files, 'xl/workbook.xml');
+  const wbDoc = new DOMParser().parseFromString(wbXml, 'application/xml');
+  const sheets = [...wbDoc.getElementsByTagName('sheet')];
+  let accRid = null;
+  for (const s of sheets) {
+    const name = s.getAttribute('name');
+    if (name === '郵費單') {
+      accRid = s.getAttributeNS('http://schemas.openxmlformats.org/officeDocument/2006/relationships', 'id')
+            || s.getAttribute('r:id');
+      break;
+    }
+  }
+  if (!accRid) throw new Error('找不到郵費單工作表');
+
+  // 2. 從 workbook.xml.rels 取得實際檔案路徑
+  const relsXml = decodeXml(files, 'xl/_rels/workbook.xml.rels');
+  const relsDoc = new DOMParser().parseFromString(relsXml, 'application/xml');
+  let sheetPath = null;
+  for (const rel of [...relsDoc.getElementsByTagName('Relationship')]) {
+    if (rel.getAttribute('Id') === accRid) {
+      sheetPath = 'xl/' + rel.getAttribute('Target').replace(/^\/xl\//, '');
+      break;
+    }
+  }
+  if (!sheetPath) throw new Error('找不到郵費單工作表路徑');
+
+  // 3. 讀取 sharedStrings（若有）
+  let sharedStrings = [];
+  const ssRaw = files['xl/sharedStrings.xml'];
+  if (ssRaw) {
+    const ssDoc = new DOMParser().parseFromString(new TextDecoder().decode(ssRaw), 'application/xml');
+    sharedStrings = [...ssDoc.getElementsByTagName('si')].map(si => si.textContent);
+  }
+
+  // 4. 解析工作表，取 row3（件數）和 row4（金額）
+  const wsXml = decodeXml(files, sheetPath);
+  const wsDoc = new DOMParser().parseFromString(wsXml, 'application/xml');
+  const rows = [...wsDoc.getElementsByTagName('row')];
+
+  function getRowCells(rowNum) {
+    const rowEl = rows.find(r => r.getAttribute('r') === String(rowNum));
+    if (!rowEl) return {};
+    const cells = {};
+    for (const c of [...rowEl.getElementsByTagName('c')]) {
+      const ref = c.getAttribute('r') || '';
+      const col = ref.replace(/[0-9]/g, '');
+      const t   = c.getAttribute('t');
+      const vEl = c.getElementsByTagName('v')[0];
+      if (!vEl) { cells[col] = 0; continue; }
+      let val = vEl.textContent.trim();
+      if (t === 's') val = sharedStrings[parseInt(val)] || '';
+      cells[col] = parseFloat(val) || 0;
+    }
+    return cells;
+  }
+
+  const row3cells = getRowCells(3); // 件數
+  const row4cells = getRowCells(4); // 金額
+
+  const result = {};
+  for (const cat of CATS) {
+    result[cat.name] = {
+      count:  row3cells[cat.ci] || 0,
+      amount: row4cells[cat.ki] || 0,
+    };
+  }
+  return result;
+}
+
+function decodeXml(files, path) {
+  const raw = files[path];
+  if (!raw) throw new Error('找不到 ' + path);
+  return new TextDecoder('utf-8').decode(raw);
+}
+
+function colIndex(ref) {
+  // e.g. "J3" → 9 (0-based)
+  const letters = ref.replace(/[0-9]/g, '');
+  let idx = 0;
+  for (const ch of letters) idx = idx * 26 + ch.charCodeAt(0) - 64;
+  return idx - 1;
+}
+
+// ── ODS → 加總 ────────────────────────────────────────────────
+function parseODS(buf) {
+  const files = parseZip(buf);
+  const xml_u8 = files['content.xml'];
+  if (!xml_u8) throw new Error('找不到 content.xml');
+  const xml = new TextDecoder('utf-8').decode(xml_u8);
+  const doc = new DOMParser().parseFromString(xml, 'application/xml');
+
+  const NS_T = 'urn:oasis:names:tc:opendocument:xmlns:table:1.0';
+  const NS_O = 'urn:oasis:names:tc:opendocument:xmlns:office:1.0';
+
+  const tables = doc.getElementsByTagNameNS(NS_T, 'table');
+  let accTable = null;
+  for (const t of tables) {
+    if (t.getAttributeNS(NS_T, 'name') === '郵費單') { accTable = t; break; }
+  }
+  if (!accTable) throw new Error('找不到郵費單工作表');
+
+  const rows = [...accTable.getElementsByTagNameNS(NS_T, 'table-row')];
+  if (rows.length < 4) throw new Error('列數不足');
+
+  const colLetters = ['A','B','C','D','E','F','G','H','I','J','K','L','M','N','O','P','Q','R','S','T','U','V','W','X','Y','Z'];
+
+  function expandRow(rowEl) {
+    const map = {};
+    let colIdx = 0;
+    for (const cell of rowEl.children) {
+      const repeat = parseInt(cell.getAttributeNS(NS_T, 'number-columns-repeated') || '1');
+      for (let i = 0; i < repeat; i++) {
+        if (colIdx < colLetters.length) map[colLetters[colIdx]] = cell;
+        colIdx++;
+      }
+    }
+    return map;
+  }
+
+  const row3cells = expandRow(rows[2]); // 件數
+  const row4cells = expandRow(rows[3]); // 金額
+
+  const result = {};
+  for (const c of CATS) {
+    result[c.name] = {
+      count:  numVal(row3cells[c.ci], NS_O),
+      amount: numVal(row4cells[c.ki], NS_O),
+    };
+  }
+  return result;
+}
+
+function numVal(cell, NS_O) {
+  if (!cell) return 0;
+  const v = cell.getAttributeNS(NS_O, 'value');
+  if (v !== null && v !== '') return parseFloat(v) || 0;
+  return parseFloat(cell.textContent.trim().replace(/,/g, '')) || 0;
+}
+
+// ── UI ────────────────────────────────────────────────────────
+let totals = {};
+let breakdown = {}; // breakdown[catName] = [{file, count, amount}, ...]
+
+function resetTotals() {
+  totals = {};
+  breakdown = {};
+  CATS.forEach(c => {
+    totals[c.name] = { count: 0, amount: 0 };
+    breakdown[c.name] = [];
+  });
+}
+
+const drop  = document.getElementById('drop');
+const input = document.getElementById('file-input');
+
+drop.addEventListener('click', () => input.click());
+drop.addEventListener('dragover', e => { e.preventDefault(); drop.classList.add('over'); });
+drop.addEventListener('dragleave', () => drop.classList.remove('over'));
+drop.addEventListener('drop', e => { e.preventDefault(); drop.classList.remove('over'); handleFiles(e.dataTransfer.files); });
+input.addEventListener('change', e => handleFiles(e.target.files));
+
+function handleFiles(files) {
+  resetTotals();
+  document.getElementById('chips').innerHTML = '';
+  document.getElementById('errors').innerHTML = '';
+  document.getElementById('result-card').style.display = 'none';
+
+  const arr = [...files].filter(f => /\.(xlsx|ods)$/i.test(f.name));
+  if (!arr.length) { addError('請選擇 .xlsx 或 .ods 格式的檔案'); return; }
+
+  let done = 0;
+  arr.forEach(f => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      let ok = false;
+      try {
+        const isXlsx = f.name.toLowerCase().endsWith('.xlsx');
+        const data = isXlsx ? parseXLSX(e.target.result) : parseODS(e.target.result);
+        for (const c of CATS) {
+          totals[c.name].count  += data[c.name].count;
+          totals[c.name].amount += data[c.name].amount;
+          breakdown[c.name].push({ file: f.name, count: data[c.name].count, amount: data[c.name].amount });
+        }
+        ok = true;
+      } catch(err) {
+        addError(f.name + '：' + err.message);
+      }
+      addChip(f.name, ok);
+      done++;
+      if (done === arr.length) renderResult(arr.length);
+    };
+    reader.readAsArrayBuffer(f);
+  });
+}
+
+function addChip(name, ok) {
+  const d = document.getElementById('chips');
+  const span = document.createElement('span');
+  span.className = 'chip ' + (ok ? 'ok' : 'err');
+  span.textContent = (ok ? '✓ ' : '✗ ') + name;
+  d.appendChild(span);
+}
+
+function addError(msg) {
+  const d = document.getElementById('errors');
+  const p = document.createElement('p');
+  p.className = 'err-msg';
+  p.textContent = '⚠ ' + msg;
+  d.appendChild(p);
+}
+
+function renderResult(total) {
+  document.getElementById('file-badge').textContent = total + ' 個檔案';
+
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = '';
+  let sumC = 0, sumA = 0;
+  for (const c of CATS) {
+    const { count, amount } = totals[c.name];
+    sumC += count; sumA += amount;
+    const tr = document.createElement('tr');
+    const isZero = count === 0 && amount === 0;
+    tr.innerHTML = `
+      <td>${c.name}</td>
+      <td class="r ${isZero?'zero':''}">${count}</td>
+      <td class="r ${isZero?'zero':''}">${amount}</td>
+      <td class="src-cell"><button class="src-btn" onclick="showSource('${c.name}')">明細</button></td>`;
+    tbody.appendChild(tr);
+  }
+  const tot = document.createElement('tr');
+  tot.className = 'total-row';
+  tot.innerHTML = `<td>合計</td><td class="r">${sumC}</td><td class="r">${sumA}</td><td></td>`;
+  tbody.appendChild(tot);
+  document.getElementById('result-card').style.display = 'block';
+}
+
+function showSource(catName) {
+  document.getElementById('modal-title').textContent = catName + '　來源明細';
+  const tbody = document.getElementById('modal-body');
+  tbody.innerHTML = '';
+  const rows = breakdown[catName] || [];
+  for (const r of rows) {
+    const isZero = r.count === 0 && r.amount === 0;
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td class="${isZero?'zero':''}">${r.file}</td>
+      <td class="r ${isZero?'zero':''}">${r.count}</td>
+      <td class="r ${isZero?'zero':''}">${r.amount}</td>`;
+    tbody.appendChild(tr);
+  }
+  document.getElementById('modal-overlay').classList.add('open');
+}
+
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+}
+
+function copyTSV() {
+  let text = '類別\t件數\t金額（元）\n';
+  let sumC = 0, sumA = 0;
+  for (const c of CATS) {
+    const { count, amount } = totals[c.name];
+    sumC += count; sumA += amount;
+    text += `${c.name}\t${count}\t${amount}\n`;
+  }
+  text += `合計\t${sumC}\t${sumA}`;
+  navigator.clipboard.writeText(text).then(() => {
+    const btn = event.target;
+    btn.textContent = '✓ 已複製！';
+    setTimeout(() => btn.textContent = '📋 複製', 1800);
+  }).catch(() => {
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    const btn = event.target;
+    btn.textContent = '✓ 已複製！';
+    setTimeout(() => btn.textContent = '📋 複製', 1800);
+  });
+}
+
+function clearAll() {
+  resetTotals();
+  document.getElementById('chips').innerHTML = '';
+  document.getElementById('errors').innerHTML = '';
+  document.getElementById('result-card').style.display = 'none';
+  input.value = '';
+}
+</script>
+</body>
+</html>
